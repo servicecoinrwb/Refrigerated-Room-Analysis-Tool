@@ -178,8 +178,8 @@
                     'Retail Store/Grocery': { temp: 35, rh: 80 },
                     'Industrial Process/Food Processing': { temp: 45, rh: 75 },
                     'Cold Storage Warehouse': { temp: 30, rh: 70 },
-                    'Floral/Science Lab': { temp: 40, rh: 90 },
                     'Frozen Storage/Freezer': { temp: -10, rh: 'N/A' }, // Added for freezer scenario
+                    'Floral/Science Lab': { temp: 40, rh: 90 },
                     'Other/General Use': { temp: 40, rh: 80 } // Default fallback
                 };
 
@@ -227,7 +227,7 @@
                     }, 3000);
                 }
                 
-                // --- Core Calculation Logic (Simplified) ---
+                // --- Core Calculation Logic (Simplified ASHRAE-based) ---
                 
                 // Load constants based on product type for better accuracy
                 const productData = {
@@ -271,12 +271,22 @@
 
                     // Guard clause for invalid dimensions or calculation parameters
                     if (boxLong <= 0 || boxWide <= 0 || boxHigh <= 0 || tempDifference <= 0) {
-                        document.getElementById('totalLoadBTU').innerText = '0';
+                        document.getElementById('totalLoadBTU').innerText = '0 BTU/hr';
                         document.getElementById('equipmentRecommendation').innerHTML = '<p class="text-red-500">Please enter valid Box Dimensions and Temperatures (Ambient > Desired) to calculate load.</p>';
+                        // Reset all calculated values
+                        document.getElementById('qTransmission').innerText = '0 BTU/hr';
+                        document.getElementById('qInfiltration').innerText = '0 BTU/hr';
+                        document.getElementById('qInternal').innerText = '0 BTU/hr';
+                        document.getElementById('qChilling').innerText = '0 BTU/hr';
+                        document.getElementById('qRespiration').innerText = '0 BTU/hr';
+                        document.getElementById('loadRatioTransmission').innerText = '0%';
+                        document.getElementById('loadRatioInfiltration').innerText = '0%';
+                        document.getElementById('loadRatioInternal').innerText = '0%';
+                        document.getElementById('loadRatioProduct').innerText = '0%';
                         return;
                     }
 
-                    // --- CALCULATION CONSTANTS (Simplified) ---
+                    // --- CALCULATION CONSTANTS ---
                     // U-Value (Assumed 4" Polyurethane, ~R-28 -> U=0.035)
                     const U_VALUE = 0.04; 
                     // Personnel Load (BTU/hr per person for moderate work)
@@ -285,30 +295,39 @@
                     const WATTS_TO_BTU = 3.41;
                     // Heat Conversion (HP to BTU/hr)
                     const HP_TO_BTU = 2545;
-                    // Infiltration Factor Base (Simplified Air Changes per Hour equivalent)
-                    const INFILTRATION_FACTOR_BASE = (desiredTemp <= 35) ? 1.2 : 0.8; // Higher for Freezers/Low Temp
+                    // Air Density (Approx)
+                    const AIR_DENSITY = 0.075; // lbs/ft³
+                    // Specific Heat of Air
+                    const CP_AIR = 0.24; // BTU/lb·°F
+                    // Standard Door CFM Multiplier (Simplified factor based on assumed door size/opening time)
+                    const CFM_FACTOR = 0.05; 
                     const SAFETY_FACTOR = 1.15; // 15% safety margin
                     
-                    // Usage Multiplier based on user input (for Infiltration)
+                    // Usage Multiplier based on user input (for Infiltration FREQUENCY)
                     let USAGE_MULTIPLIER;
                     switch (boxUsage) {
                         case 'Long Storage':
-                            USAGE_MULTIPLIER = 0.1; // Minimal door opening, low air exchange
+                            USAGE_MULTIPLIER = 1; // 1 air change equivalent per day
                             break;
                         case 'Heavy':
-                            USAGE_MULTIPLIER = 2.0; // High door opening, high air exchange
+                            USAGE_MULTIPLIER = 12; // 12 air changes equivalent per day
                             break;
                         case 'Regular':
                         default:
-                            USAGE_MULTIPLIER = 0.8; // Normal operation (default)
+                            USAGE_MULTIPLIER = 4; // 4 air changes equivalent per day
                             break;
                     }
                     
                     // --- 1. Transmission Load (Heat Leak) ---
+                    // Q = U * A * dT (hourly)
                     const qTransmission = U_VALUE * totalSurfaceArea * tempDifference;
 
-                    // --- 2. Infiltration Load (Air Changes) ---
-                    const qInfiltration = boxVolume * tempDifference * INFILTRATION_FACTOR_BASE * USAGE_MULTIPLIER;
+                    // --- 2. Infiltration Load (Door/Air Leakage - Simplified CFM method) ---
+                    // This uses a simplified method based on air changes per day (ACH) equivalent
+                    // Q_Infiltration = Volume * ACH_Equivalent * dT * AirDensity * Cp_Air / 24 hrs
+                    // The USAGE_MULTIPLIER is used as the ACH_Equivalent here for simplicity
+                    const qInfiltration = boxVolume * USAGE_MULTIPLIER * tempDifference * AIR_DENSITY * CP_AIR / 24;
+
 
                     // --- 3. Internal Load (Lights, Motors, People) ---
                     const qLights = lightingWPerSqFt * floorArea * WATTS_TO_BTU;
@@ -320,7 +339,7 @@
                     // --- 4. Product Load Components ---
                     let qChilling = 0;
                     if (pullDownHours > 0 && maxLoadLbs > 0 && (enteringTemp > finalTemp)) {
-                        // Q_chilling = Mass * SpecificHeat * DeltaT / PullDownHours * 24hrs/day
+                        // Q_chilling = Mass * SpecificHeat * DeltaT / PullDownHours (hourly average)
                         qChilling = (maxLoadLbs * specificHeat * (enteringTemp - finalTemp)) / pullDownHours;
                     }
                     
@@ -336,6 +355,14 @@
                     // Round the final result
                     const finalBTU = Math.round(totalRequiredCapacity);
 
+                    // --- Load Ratios ---
+                    const totalLoadNoSafety = qTransmission + qInfiltration + qInternal + qProductTotal;
+                    
+                    const ratioTransmission = ((qTransmission / totalLoadNoSafety) * 100).toFixed(1);
+                    const ratioInfiltration = ((qInfiltration / totalLoadNoSafety) * 100).toFixed(1);
+                    const ratioInternal = ((qInternal / totalLoadNoSafety) * 100).toFixed(1);
+                    const ratioProduct = ((qProductTotal / totalLoadNoSafety) * 100).toFixed(1);
+
                     // --- Display Results ---
                     document.getElementById('qTransmission').innerText = Math.round(qTransmission).toLocaleString() + ' BTU/hr';
                     document.getElementById('qInfiltration').innerText = Math.round(qInfiltration).toLocaleString() + ' BTU/hr';
@@ -343,6 +370,12 @@
                     document.getElementById('qChilling').innerText = Math.round(qChilling).toLocaleString() + ' BTU/hr';
                     document.getElementById('qRespiration').innerText = Math.round(qRespiration).toLocaleString() + ' BTU/hr';
                     document.getElementById('totalLoadBTU').innerText = finalBTU.toLocaleString() + ' BTU/hr';
+                    
+                    document.getElementById('loadRatioTransmission').innerText = isNaN(ratioTransmission) ? '0%' : ratioTransmission + '%';
+                    document.getElementById('loadRatioInfiltration').innerText = isNaN(ratioInfiltration) ? '0%' : ratioInfiltration + '%';
+                    document.getElementById('loadRatioInternal').innerText = isNaN(ratioInternal) ? '0%' : ratioInternal + '%';
+                    document.getElementById('loadRatioProduct').innerText = isNaN(ratioProduct) ? '0%' : ratioProduct + '%';
+
                     
                     // --- Equipment Recommendation ---
                     let recommendation = '';
@@ -359,11 +392,14 @@
                         tempRange = 'High Temperature (Process Cooling)';
                         tdSuggestion = 'High TD Coil (15°F+) may be suitable if humidity control is not critical.';
                     }
+                    
+                    const approximateHP = (finalBTU / 12000).toFixed(2); // 1 Ton = 12,000 BTU/hr
 
                     recommendation = `
                         <p class="mt-2 text-sm text-gray-800">
                             <strong>Box Type:</strong> ${tempRange}<br>
                             <strong>Capacity Class:</strong> The calculated required capacity is approximately ${finalBTU.toLocaleString()} BTU/hr.<br>
+                            <strong>Approximate HP Required:</strong> ${approximateHP} HP (Total capacity)<br>
                             <strong>Evaporator Suggestion:</strong> ${tdSuggestion}
                         </p>
                         <p class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
@@ -421,8 +457,6 @@
                     // Run initial setup and calculation after DOM load to populate Section 7 with default values
                     toggleSunExposure(); // Initial check for location/sun
                     updateUsageDefaults(getRadioValue('boxUsage')); // Apply initial usage defaults
-                    // Delaying this initial application to allow the user to see the change after selecting
-                    // updateTempRHDefaults(); 
                     calculateLoad();
                 });
             </script>
@@ -900,9 +934,21 @@
                         <div class="text-lg font-extrabold text-right text-blue-700" id="totalLoadBTU">0 BTU/hr</div>
                     </div>
 
+                    <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Load Ratios (No Safety Factor)</h3>
+                    <div class="grid grid-cols-2 gap-4 p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-sm">
+                        <div class="font-medium text-gray-700">Transmission %:</div>
+                        <div class="text-right font-bold text-gray-900" id="loadRatioTransmission">0%</div>
+                        <div class="font-medium text-gray-700">Infiltration %:</div>
+                        <div class="text-right font-bold text-gray-900" id="loadRatioInfiltration">0%</div>
+                        <div class="font-medium text-gray-700">Internal %:</div>
+                        <div class="text-right font-bold text-gray-900" id="loadRatioInternal">0%</div>
+                        <div class="font-medium text-gray-700">Product %:</div>
+                        <div class="text-right font-bold text-gray-900" id="loadRatioProduct">0%</div>
+                    </div>
+
                     <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Equipment Recommendation</h3>
                     <div id="equipmentRecommendation" class="p-3 bg-white rounded-lg border border-gray-200">
-                        <p class="text-gray-500">Click the "Calculate Load" button below to generate a recommendation.</p>
+                        <p class="text-gray-500">Click the "Calculate Load" button to generate a recommendation.</p>
                     </div>
                 </div>
             </div>
