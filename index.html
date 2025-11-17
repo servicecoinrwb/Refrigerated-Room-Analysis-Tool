@@ -116,6 +116,63 @@
                     }
                 }
 
+                // --- NEW: Autofill Logic for Usage Type ---
+                function updateUsageDefaults(usageType) {
+                    let lights, personnelQty, personnelHours, motorsHP;
+
+                    // Defaults are based on common industry standards for each usage type
+                    switch (usageType) {
+                        case 'Long Storage':
+                            lights = 0.5; // Minimal or motion-activated lighting
+                            personnelQty = 1;
+                            personnelHours = 1; // 1 hour per day
+                            motorsHP = 0.5; // Fan motors only
+                            break;
+                        case 'Heavy':
+                            lights = 2.0; // Higher lighting density
+                            personnelQty = 3; // More people working inside
+                            personnelHours = 8; // Full shift access
+                            motorsHP = 1.0; // Multiple fans / larger unit
+                            break;
+                        case 'Regular':
+                        default:
+                            lights = 1.5;
+                            personnelQty = 1;
+                            personnelHours = 4; // 4 hours per day
+                            motorsHP = 0.5;
+                            break;
+                    }
+
+                    document.getElementById('lightingWPerSqFt').value = lights;
+                    document.getElementById('personnelQty').value = personnelQty;
+                    document.getElementById('personnelHours').value = personnelHours;
+                    document.getElementById('motorsHP').value = motorsHP;
+
+                    calculateLoad(); // Trigger calculation after updating
+                }
+                
+                // --- NEW: Location Visibility Logic ---
+                function toggleSunExposure() {
+                    const location = getRadioValue('boxLocation');
+                    const sunExposureField = document.getElementById('sunExposureField');
+                    const outdoorSunRadio = document.getElementById('outdoorFullSun');
+                    const outdoorShadeRadio = document.getElementById('outdoorPartialShade');
+
+                    if (location === 'Indoors') {
+                        sunExposureField.classList.add('hidden');
+                        // Set sun exposure to a neutral/default state when indoors
+                        outdoorShadeRadio.checked = true; // Use shade as the base outdoor default
+                    } else if (location === 'Outdoors') {
+                        sunExposureField.classList.remove('hidden');
+                        // Ensure at least one is selected when outdoors is picked
+                        if (!outdoorSunRadio.checked && !outdoorShadeRadio.checked) {
+                            outdoorShadeRadio.checked = true;
+                        }
+                    }
+                    calculateLoad(); // Trigger calculation after updating
+                }
+
+
                 // Function to handle the print button
                 function printForm() {
                     // Force open all sections before printing
@@ -206,7 +263,7 @@
                     const INFILTRATION_FACTOR_BASE = (desiredTemp <= 35) ? 1.2 : 0.8; // Higher for Freezers/Low Temp
                     const SAFETY_FACTOR = 1.15; // 15% safety margin
                     
-                    // Usage Multiplier based on user input
+                    // Usage Multiplier based on user input (for Infiltration)
                     let USAGE_MULTIPLIER;
                     switch (boxUsage) {
                         case 'Long Storage':
@@ -230,7 +287,8 @@
                     // --- 3. Internal Load (Lights, Motors, People) ---
                     const qLights = lightingWPerSqFt * floorArea * WATTS_TO_BTU;
                     const qMotors = motorsHP * HP_TO_BTU;
-                    const qPersonnel = personnelQty * PERSONNEL_LOAD_BTU_HR * (personnelHours / 24); // Averaged over 24 hrs
+                    // Calculate personnel load based on people x hours per day, averaged over 24 hours
+                    const qPersonnel = personnelQty * PERSONNEL_LOAD_BTU_HR * (personnelHours / 24); 
                     const qInternal = qLights + qMotors + qPersonnel;
 
                     // --- 4. Product Load Components ---
@@ -302,9 +360,14 @@
                     
                     // Add listeners to product and usage inputs to trigger recalculation
                     document.getElementsByName('boxUsage').forEach(radio => {
-                        radio.addEventListener('change', calculateLoad);
+                        radio.addEventListener('change', (e) => {
+                            updateUsageDefaults(e.target.value);
+                        });
                     });
                     document.getElementById('productType').addEventListener('change', calculateLoad);
+                    document.getElementsByName('boxLocation').forEach(radio => {
+                        radio.addEventListener('change', toggleSunExposure);
+                    });
 
 
                     // Form submit handler (original)
@@ -327,7 +390,9 @@
                         }
                     });
                     
-                    // Run initial calculation after DOM load to populate Section 7 with default values
+                    // Run initial setup and calculation after DOM load to populate Section 7 with default values
+                    toggleSunExposure(); // Initial check for location/sun
+                    updateUsageDefaults(getRadioValue('boxUsage')); // Apply initial usage defaults
                     calculateLoad();
                 });
             </script>
@@ -369,23 +434,35 @@
                     </div>
                     
                     <h3 class="text-lg font-bold text-gray-800 mb-2 mt-6 border-t pt-4">Room Usage Details</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <select id="primaryApplication" class="p-3 border border-gray-300 rounded-lg w-full mb-3" required>
+                            <option value="">Select Primary Application</option>
+                            <option value="Restaurant/Food Service">Restaurant/Food Service</option>
+                            <option value="Retail Store/Grocery">Retail Store/Grocery</option>
+                            <option value="Industrial Process/Food Processing">Industrial Process/Food Processing</option>
+                            <option value="Cold Storage Warehouse">Cold Storage Warehouse</option>
+                            <option value="Floral/Science Lab">Floral/Science Lab</option>
+                            <option value="Other/General Use">Other/General Use</option>
+                        </select>
+                    </div>
+
                     <div class="mt-4">
-                        <input type="text" placeholder="Type of Business where box is Installed" class="p-3 border border-gray-300 rounded-lg w-full mb-3" required>
                         <div class="flex flex-wrap gap-4">
-                            <span class="text-gray-600">Box usage is:</span>
+                            <span class="text-gray-600 font-medium">Box usage is:</span>
                             <label class="inline-flex items-center">
                                 <input type="radio" name="boxUsage" value="Regular" class="form-radio text-blue-600 h-4 w-4" checked>
-                                <span class="ml-2 text-gray-700">Regular</span>
+                                <span class="ml-2 text-gray-700">Regular (Default)</span>
                             </label>
                             <label class="inline-flex items-center">
                                 <input type="radio" name="boxUsage" value="Heavy" class="form-radio text-blue-600 h-4 w-4">
-                                <span class="ml-2 text-gray-700">Heavy</span>
+                                <span class="ml-2 text-gray-700">Heavy (High Traffic)</span>
                             </label>
                             <label class="inline-flex items-center">
                                 <input type="radio" name="boxUsage" value="Long Storage" class="form-radio text-blue-600 h-4 w-4">
-                                <span class="ml-2 text-gray-700">Long Storage</span>
+                                <span class="ml-2 text-gray-700">Long Storage (Low Traffic)</span>
                             </label>
                         </div>
+                        <p class="text-xs text-gray-500 mt-2">Selecting a usage type automatically adjusts the default estimates for lighting, personnel, and motor usage in Section 4.</p>
                     </div>
                 </div>
             </div>
@@ -419,11 +496,13 @@
                                 <label class="inline-flex items-center"><input type="radio" name="boxLocation" value="Outdoors" class="form-radio text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Outdoors</span></label>
                             </div>
                         </div>
-                        <div class="col-span-2">
+                        
+                        <!-- Sun Exposure - Conditional based on Box Location -->
+                        <div id="sunExposureField" class="col-span-2">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Sun Exposure</label>
                             <div class="flex gap-4">
-                                <label class="inline-flex items-center"><input type="radio" name="sunExposure" value="Full Sun" class="form-radio text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Full Sun</span></label>
-                                <label class="inline-flex items-center"><input type="radio" name="sunExposure" value="Partial Shade" class="form-radio text-blue-600 h-4 w-4" checked><span class="ml-2 text-gray-700">Partial Shade</span></label>
+                                <label class="inline-flex items-center"><input type="radio" name="sunExposure" id="outdoorFullSun" value="Full Sun" class="form-radio text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Full Sun</span></label>
+                                <label class="inline-flex items-center"><input type="radio" name="sunExposure" id="outdoorPartialShade" value="Partial Shade" class="form-radio text-blue-600 h-4 w-4" checked><span class="ml-2 text-gray-700">Partial Shade</span></label>
                             </div>
                         </div>
 
@@ -636,7 +715,7 @@
                         </div>
                     </div>
 
-                    <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Equipment & Usage</h3>
+                    <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Equipment & Usage (Auto-filled by Box Usage)</h3>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <!-- Lighting -->
                         <div class="col-span-2">
@@ -651,7 +730,7 @@
 
                         <!-- Personnel -->
                         <div class="col-span-2">
-                            <label class="block text-sm font-medium text-gray-700">Personnel</label>
+                            <label class="block text-sm font-medium text-gray-700">Personnel (Qty / Hours/day)</label>
                             <div class="flex gap-2">
                                 <input type="number" min="0" placeholder="Qty" id="personnelQty" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="1">
                                 <input type="number" min="0" step="0.1" placeholder="Hours/day" id="personnelHours" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="4">
@@ -660,7 +739,7 @@
 
                         <!-- Forklifts -->
                         <div class="col-span-2">
-                            <label class="block text-sm font-medium text-gray-700">Forklifts</label>
+                            <label class="block text-sm font-medium text-gray-700">Forklifts (Qty / Hours/day)</label>
                             <div class="flex gap-2">
                                 <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
                                 <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
@@ -669,7 +748,7 @@
 
                         <!-- Pallet Jacks -->
                         <div class="col-span-2">
-                            <label class="block text-sm font-medium text-gray-700">Pallet Jacks</label>
+                            <label class="block text-sm font-medium text-gray-700">Pallet Jacks (Qty / Hours/day)</label>
                             <div class="flex gap-2">
                                 <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
                                 <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
