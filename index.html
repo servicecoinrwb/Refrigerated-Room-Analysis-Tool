@@ -285,6 +285,9 @@
                             el.addEventListener('change', calculateLoad);
                         }
                     });
+                    
+                    // Run initial calculation after DOM load to populate Section 7 with default values
+                    calculateLoad();
                 });
             </script>
 
@@ -293,7 +296,7 @@
 
 
             <!-- ------------------------------------------------------------------- -->
-            <!-- SECTION 1: Company & Contact Information -->
+            <!-- SECTION 1: Contact & Submission Details -->
             <!-- ------------------------------------------------------------------- -->
             <div class="print-section mb-6">
                 <div class="collapse-header flex justify-between items-center py-2" onclick="toggleCollapse('contactSection')">
@@ -302,21 +305,30 @@
                 </div>
 
                 <div id="contactSection" class="collapse-content open">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                        <input type="text" placeholder="Company" class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
-                        <input type="text" placeholder="Account #" class="p-3 border border-gray-300 rounded-lg">
-                        <input type="text" placeholder="Contact" class="p-3 border border-gray-300 rounded-lg" required>
-                        <input type="tel" placeholder="Phone" class="p-3 border border-gray-300 rounded-lg">
-                        <input type="date" placeholder="Date" class="p-3 border border-gray-300 rounded-lg" required>
-                        <input type="tel" placeholder="Fax" class="p-3 border border-gray-300 rounded-lg">
-                        <input type="text" placeholder="MAIL #" class="p-3 border border-gray-300 rounded-lg">
-                        <input type="text" placeholder="Submitted by Branch #" class="p-3 border border-gray-300 rounded-lg">
-                        <input type="text" placeholder="Contractor Name" class="p-3 border border-gray-300 rounded-lg col-span-2 md:col-span-1" required>
-                        <input type="date" placeholder="Review Date" class="p-3 border border-gray-300 rounded-lg col-span-2 md:col-span-1" required>
+                    <!-- Hardcoded Contractor Details -->
+                    <h3 class="text-lg font-bold text-blue-700 mb-2 mt-2">Contractor (Submitted By)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 border border-blue-200 rounded-lg bg-blue-50">
+                        <div class="font-bold text-gray-800 col-span-2">Mechanical Temp</div>
+                        <div class="text-sm text-gray-700">23093 Telegraph Rd, Southfield MI 48033</div>
+                        <div class="text-sm text-gray-700">Phone: 313-282-4758</div>
+                        <div class="text-sm text-gray-700">Email: office@mechanicaltemp.com</div>
+                        <div class="text-sm text-gray-700">Web: www.mechanicaltemp.com</div>
                     </div>
 
+                    <!-- Customer Input Fields -->
+                    <h3 class="text-lg font-bold text-gray-800 mb-2 mt-6 border-t pt-4">Customer / Jobsite Information</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input type="text" placeholder="Company" class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                        <input type="text" placeholder="Account #" class="p-3 border border-gray-300 rounded-lg">
+                        <input type="text" placeholder="Contact Person" class="p-3 border border-gray-300 rounded-lg" required>
+                        <input type="tel" placeholder="Phone" class="p-3 border border-gray-300 rounded-lg">
+                        <input type="text" placeholder="Job Address" class="p-3 border border-gray-300 rounded-lg col-span-2" required>
+                        <input type="date" placeholder="Date Submitted" class="p-3 border border-gray-300 rounded-lg" required>
+                        <input type="text" placeholder="Submitted by Branch #" class="p-3 border border-gray-300 rounded-lg">
+                    </div>
+                    
+                    <h3 class="text-lg font-bold text-gray-800 mb-2 mt-6 border-t pt-4">Room Usage Details</h3>
                     <div class="mt-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Type of Business / Box Usage</label>
                         <input type="text" placeholder="Type of Business where box is Installed" class="p-3 border border-gray-300 rounded-lg w-full mb-3" required>
                         <div class="flex flex-wrap gap-4">
                             <span class="text-gray-600">Box usage is:</span>
@@ -417,7 +429,7 @@
             <!-- ------------------------------------------------------------------- -->
             <!-- SECTION 3: Insulation & Doors -->
             <!-- ------------------------------------------------------------------- -->
-            <div class="print-section mb-6">
+            <div class="page-break print-section mb-6">
                 <div class="collapse-header flex justify-between items-center py-2" onclick="toggleCollapse('insulationSection')">
                     <h2 class="text-xl font-semibold text-gray-800">3. Insulation & Door Details</h2>
                     <svg id="arrow-insulationSection" class="w-5 h-5 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -676,28 +688,24 @@
             </div>
 
             <!-- ------------------------------------------------------------------- -->
-            <!-- SECTION 6: Sketch & Comments -->
+            <!-- SECTION 6: Comments -->
             <!-- ------------------------------------------------------------------- -->
             <div class="print-section mb-6">
                 <div class="collapse-header flex justify-between items-center py-2" onclick="toggleCollapse('commentsSection')">
-                    <h2 class="text-xl font-semibold text-gray-800">6. Sketch & Comments</h2>
+                    <h2 class="text-xl font-semibold text-gray-800">6. Comments / Additional Info</h2>
                     <svg id="arrow-commentsSection" class="w-5 h-5 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                 </div>
 
                 <div id="commentsSection" class="collapse-content">
-                    <div class="mt-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Sketch Box / Irregular Shape Dimensions (Describe or reference sketch):</label>
-                        <textarea placeholder="e.g., Sketch is included separately or Describe Irregular dimensions here." class="p-3 border border-gray-300 rounded-lg w-full h-32"></textarea>
-                    </div>
                     <div class="mt-4">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Comments / Additional Info:</label>
-                        <textarea placeholder="Leave no blank lines. Enter '0' as needed or 'N/A' for questions that do not apply to this project." class="p-3 border border-gray-300 rounded-lg w-full h-32"></textarea>
+                        <textarea placeholder="Include any details about irregular shapes, door locations, or special requirements here. Enter '0' or 'N/A' for non-applicable questions." class="p-3 border border-gray-300 rounded-lg w-full h-32"></textarea>
                     </div>
                 </div>
             </div>
             
             <!-- ------------------------------------------------------------------- -->
-            <!-- NEW SECTION 7: Load Calculation & Equipment Selection -->
+            <!-- SECTION 7: Load Calculation & Equipment Selection -->
             <!-- ------------------------------------------------------------------- -->
             <div class="print-section mb-6">
                 <div class="collapse-header flex justify-between items-center py-2 bg-blue-50 border-y border-blue-200" onclick="toggleCollapse('calculationSection')">
