@@ -171,6 +171,32 @@
                     }
                     calculateLoad(); // Trigger calculation after updating
                 }
+                
+                // --- NEW: Temperature and RH Autofill Logic ---
+                const defaultSettings = {
+                    'Restaurant/Food Service': { temp: 38, rh: 85 },
+                    'Retail Store/Grocery': { temp: 35, rh: 80 },
+                    'Industrial Process/Food Processing': { temp: 45, rh: 75 },
+                    'Cold Storage Warehouse': { temp: 30, rh: 70 },
+                    'Floral/Science Lab': { temp: 40, rh: 90 },
+                    'Frozen Storage/Freezer': { temp: -10, rh: 'N/A' }, // Added for freezer scenario
+                    'Other/General Use': { temp: 40, rh: 80 } // Default fallback
+                };
+
+                function updateTempRHDefaults() {
+                    const application = document.getElementById('primaryApplication').value;
+                    const settings = defaultSettings[application] || defaultSettings['Other/General Use'];
+
+                    const tempInput = document.getElementById('desiredTemp');
+                    const rhInput = document.getElementById('desiredRH');
+
+                    tempInput.value = settings.temp;
+                    rhInput.value = (settings.rh === 'N/A') ? '' : settings.rh;
+                    rhInput.placeholder = (settings.rh === 'N/A') ? 'N/A for Freezers' : 'Humidity';
+
+                    // Force recalculation when primary application changes
+                    calculateLoad();
+                }
 
 
                 // Function to handle the print button
@@ -246,7 +272,7 @@
                     // Guard clause for invalid dimensions or calculation parameters
                     if (boxLong <= 0 || boxWide <= 0 || boxHigh <= 0 || tempDifference <= 0) {
                         document.getElementById('totalLoadBTU').innerText = '0';
-                        document.getElementById('equipmentRecommendation').innerText = 'Please enter valid Box Dimensions and Temperatures (Ambient > Desired)';
+                        document.getElementById('equipmentRecommendation').innerHTML = '<p class="text-red-500">Please enter valid Box Dimensions and Temperatures (Ambient > Desired) to calculate load.</p>';
                         return;
                     }
 
@@ -358,12 +384,14 @@
                         toggleCollapse('calculationSection'); // Open the results section
                     });
                     
-                    // Add listeners to product and usage inputs to trigger recalculation
+                    // Add listeners to control fields
                     document.getElementsByName('boxUsage').forEach(radio => {
                         radio.addEventListener('change', (e) => {
                             updateUsageDefaults(e.target.value);
                         });
                     });
+                    
+                    document.getElementById('primaryApplication').addEventListener('change', updateTempRHDefaults); // NEW LISTENER
                     document.getElementById('productType').addEventListener('change', calculateLoad);
                     document.getElementsByName('boxLocation').forEach(radio => {
                         radio.addEventListener('change', toggleSunExposure);
@@ -393,6 +421,8 @@
                     // Run initial setup and calculation after DOM load to populate Section 7 with default values
                     toggleSunExposure(); // Initial check for location/sun
                     updateUsageDefaults(getRadioValue('boxUsage')); // Apply initial usage defaults
+                    // Delaying this initial application to allow the user to see the change after selecting
+                    // updateTempRHDefaults(); 
                     calculateLoad();
                 });
             </script>
@@ -436,13 +466,14 @@
                     <h3 class="text-lg font-bold text-gray-800 mb-2 mt-6 border-t pt-4">Room Usage Details</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <select id="primaryApplication" class="p-3 border border-gray-300 rounded-lg w-full mb-3" required>
-                            <option value="">Select Primary Application</option>
-                            <option value="Restaurant/Food Service">Restaurant/Food Service</option>
-                            <option value="Retail Store/Grocery">Retail Store/Grocery</option>
-                            <option value="Industrial Process/Food Processing">Industrial Process/Food Processing</option>
-                            <option value="Cold Storage Warehouse">Cold Storage Warehouse</option>
-                            <option value="Floral/Science Lab">Floral/Science Lab</option>
-                            <option value="Other/General Use">Other/General Use</option>
+                            <option value="Other/General Use">Select Primary Application (Autofills Temp/RH)</option>
+                            <option value="Restaurant/Food Service">Restaurant/Food Service (e.g., 38°F / 85% RH)</option>
+                            <option value="Retail Store/Grocery">Retail Store/Grocery (e.g., 35°F / 80% RH)</option>
+                            <option value="Industrial Process/Food Processing">Industrial Process/Food Processing (e.g., 45°F / 75% RH)</option>
+                            <option value="Cold Storage Warehouse">Cold Storage Warehouse (e.g., 30°F / 70% RH)</option>
+                            <option value="Frozen Storage/Freezer">Frozen Storage/Freezer (e.g., -10°F / N/A RH)</option>
+                            <option value="Floral/Science Lab">Floral/Science Lab (e.g., 40°F / 90% RH)</option>
+                            <option value="Other/General Use">Other/General Use (e.g., 40°F / 80% RH)</option>
                         </select>
                     </div>
 
@@ -485,7 +516,7 @@
                         </div>
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-500">Humidity (% RH)</label>
-                            <input type="number" min="0" max="100" placeholder="Humidity" class="p-3 border border-gray-300 rounded-lg w-full" required value="80">
+                            <input type="number" min="0" max="100" placeholder="Humidity" id="desiredRH" class="p-3 border border-gray-300 rounded-lg w-full" required value="80">
                         </div>
 
                         <!-- Location -->
