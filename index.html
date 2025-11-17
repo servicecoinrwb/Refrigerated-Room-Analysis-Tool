@@ -145,6 +145,17 @@
                 }
                 
                 // --- Core Calculation Logic (Simplified) ---
+                
+                // Load constants based on product type for better accuracy
+                const productData = {
+                    'Generic Cooler Items': { specificHeat: 0.85, respirationLoadBTU: 0 }, // Specific Heat (Btu/lb/°F), Respiration (BTU/day)
+                    'Chilled Meat/Poultry': { specificHeat: 0.8, respirationLoadBTU: 0 },
+                    'Dairy/Milk/Eggs': { specificHeat: 0.9, respirationLoadBTU: 0 },
+                    'Fresh Produce (Respiration Load)': { specificHeat: 0.92, respirationLoadBTU: 6000 }, // Assumes high respiration veg/fruit for conservative sizing
+                    'Frozen Food (Below 32F)': { specificHeat: 0.4, respirationLoadBTU: 0 }, 
+                    'Beverages/Canned Goods': { specificHeat: 0.95, respirationLoadBTU: 0 },
+                };
+
                 function calculateLoad() {
                     // 1. Get Core Inputs
                     const boxLong = getInputValue('boxLong');
@@ -160,7 +171,14 @@
                     const personnelHours = getInputValue('personnelHours');
                     const lightingWPerSqFt = getInputValue('lightingWPerSqFt');
                     const motorsHP = getInputValue('motorsHP');
+                    const boxUsage = getRadioValue('boxUsage'); // Get usage type
+                    const productType = document.getElementById('productType').value; // Get product type
                     
+                    // Look up specific heat and respiration load
+                    const productConstants = productData[productType] || productData['Generic Cooler Items'];
+                    const specificHeat = productConstants.specificHeat;
+                    const respirationLoadBTU_Day = productConstants.respirationLoadBTU;
+
                     const floorArea = boxLong * boxWide;
                     const wallArea = 2 * (boxLong * boxHigh) + 2 * (boxWide * boxHigh);
                     const ceilingArea = floorArea;
@@ -184,36 +202,51 @@
                     const WATTS_TO_BTU = 3.41;
                     // Heat Conversion (HP to BTU/hr)
                     const HP_TO_BTU = 2545;
-                    // Generic Product Specific Heat (Btu/lb/°F for chilling)
-                    const SPECIFIC_HEAT = 0.8;
-                    // Infiltration Factor (Simplified Air Changes per Hour equivalent)
-                    const INFILTRATION_FACTOR = (desiredTemp <= 35) ? 1.2 : 0.8; // Higher for Freezers/Low Temp
+                    // Infiltration Factor Base (Simplified Air Changes per Hour equivalent)
+                    const INFILTRATION_FACTOR_BASE = (desiredTemp <= 35) ? 1.2 : 0.8; // Higher for Freezers/Low Temp
                     const SAFETY_FACTOR = 1.15; // 15% safety margin
-
+                    
+                    // Usage Multiplier based on user input
+                    let USAGE_MULTIPLIER;
+                    switch (boxUsage) {
+                        case 'Long Storage':
+                            USAGE_MULTIPLIER = 0.1; // Minimal door opening, low air exchange
+                            break;
+                        case 'Heavy':
+                            USAGE_MULTIPLIER = 2.0; // High door opening, high air exchange
+                            break;
+                        case 'Regular':
+                        default:
+                            USAGE_MULTIPLIER = 0.8; // Normal operation (default)
+                            break;
+                    }
+                    
                     // --- 1. Transmission Load (Heat Leak) ---
-                    // Simplified: Uses a single U-value and the main ambient temperature difference.
                     const qTransmission = U_VALUE * totalSurfaceArea * tempDifference;
 
                     // --- 2. Infiltration Load (Air Changes) ---
-                    // Simplified: Uses box volume, ambient/box temp, and an experience factor.
-                    const qInfiltration = boxVolume * tempDifference * INFILTRATION_FACTOR;
+                    const qInfiltration = boxVolume * tempDifference * INFILTRATION_FACTOR_BASE * USAGE_MULTIPLIER;
 
                     // --- 3. Internal Load (Lights, Motors, People) ---
                     const qLights = lightingWPerSqFt * floorArea * WATTS_TO_BTU;
                     const qMotors = motorsHP * HP_TO_BTU;
                     const qPersonnel = personnelQty * PERSONNEL_LOAD_BTU_HR * (personnelHours / 24); // Averaged over 24 hrs
-                    
                     const qInternal = qLights + qMotors + qPersonnel;
 
-                    // --- 4. Product Load (Sensible Chilling Only) ---
-                    let qProduct = 0;
+                    // --- 4. Product Load Components ---
+                    let qChilling = 0;
                     if (pullDownHours > 0 && maxLoadLbs > 0 && (enteringTemp > finalTemp)) {
-                        // Q_product = Mass * C * DeltaT / PullDownHours * 24hrs/day
-                        qProduct = (maxLoadLbs * SPECIFIC_HEAT * (enteringTemp - finalTemp)) / pullDownHours;
+                        // Q_chilling = Mass * SpecificHeat * DeltaT / PullDownHours * 24hrs/day
+                        qChilling = (maxLoadLbs * specificHeat * (enteringTemp - finalTemp)) / pullDownHours;
                     }
+                    
+                    // Respiration Load (Constant heat addition from living products, averaged over 24 hours)
+                    const qRespiration = respirationLoadBTU_Day / 24;
+
+                    const qProductTotal = qChilling + qRespiration;
 
                     // --- 5. Total Design Load ---
-                    const totalDesignLoad = qTransmission + qInfiltration + qInternal + qProduct;
+                    const totalDesignLoad = qTransmission + qInfiltration + qInternal + qProductTotal;
                     const totalRequiredCapacity = totalDesignLoad * SAFETY_FACTOR;
                     
                     // Round the final result
@@ -223,7 +256,8 @@
                     document.getElementById('qTransmission').innerText = Math.round(qTransmission).toLocaleString() + ' BTU/hr';
                     document.getElementById('qInfiltration').innerText = Math.round(qInfiltration).toLocaleString() + ' BTU/hr';
                     document.getElementById('qInternal').innerText = Math.round(qInternal).toLocaleString() + ' BTU/hr';
-                    document.getElementById('qProduct').innerText = Math.round(qProduct).toLocaleString() + ' BTU/hr';
+                    document.getElementById('qChilling').innerText = Math.round(qChilling).toLocaleString() + ' BTU/hr';
+                    document.getElementById('qRespiration').innerText = Math.round(qRespiration).toLocaleString() + ' BTU/hr';
                     document.getElementById('totalLoadBTU').innerText = finalBTU.toLocaleString() + ' BTU/hr';
                     
                     // --- Equipment Recommendation ---
@@ -265,6 +299,13 @@
                         calculateLoad();
                         toggleCollapse('calculationSection'); // Open the results section
                     });
+                    
+                    // Add listeners to product and usage inputs to trigger recalculation
+                    document.getElementsByName('boxUsage').forEach(radio => {
+                        radio.addEventListener('change', calculateLoad);
+                    });
+                    document.getElementById('productType').addEventListener('change', calculateLoad);
+
 
                     // Form submit handler (original)
                     form.addEventListener('submit', (e) => {
@@ -563,8 +604,20 @@
                 <div id="loadSection" class="collapse-content">
                     <h3 class="text-lg font-medium text-gray-800 mt-3 mb-2">Product Details</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" placeholder="Product (e.g., Beef, Produce, Frozen Poultry)" class="p-3 border border-gray-300 rounded-lg" required value="Fresh Produce">
+                        
+                        <!-- NEW PRODUCT DROPDOWN -->
+                        <select id="productType" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <option value="Generic Cooler Items">Generic Cooler Items (Default)</option>
+                            <option value="Chilled Meat/Poultry">Chilled Meat/Poultry (Above 32°F)</option>
+                            <option value="Fresh Produce (Respiration Load)">Fresh Produce (Respiration Load)</option>
+                            <option value="Dairy/Milk/Eggs">Dairy/Milk/Eggs</option>
+                            <option value="Beverages/Canned Goods">Beverages/Canned Goods</option>
+                            <option value="Frozen Food (Below 32F)">Frozen Food (Below 32°F)</option>
+                        </select>
+                        <!-- END NEW PRODUCT DROPDOWN -->
+
                         <input type="text" placeholder="Packaging (e.g., Cardboard, Plastic Wrap, None)" class="p-3 border border-gray-300 rounded-lg" required value="Cardboard Boxes">
+                        
                         <div class="col-span-full">
                             <label class="block text-xs font-medium text-gray-500">Maximum Load (lbs. per day)</label>
                             <input type="number" step="0.1" placeholder="Max Load (lbs/day)" id="maxLoadLbs" class="p-3 border border-gray-300 rounded-lg w-full" required value="1000">
@@ -716,17 +769,20 @@
                 <div id="calculationSection" class="collapse-content">
                     <h3 class="text-lg font-medium text-gray-800 mt-3 mb-2">Calculated Heat Loads (BTU/hr)</h3>
                     <div class="grid grid-cols-2 gap-4 p-4 rounded-lg bg-gray-50 border">
-                        <div class="text-sm font-medium text-gray-600">Transmission Load (Walls, Floor, Ceiling):</div>
+                        <div class="text-sm font-medium text-gray-600">1. Transmission Load (Walls, Floor, Ceiling):</div>
                         <div class="text-sm font-bold text-right text-gray-800" id="qTransmission">0 BTU/hr</div>
                         
-                        <div class="text-sm font-medium text-gray-600">Infiltration Load (Door/Air Leakage):</div>
+                        <div class="text-sm font-medium text-gray-600">2. Infiltration Load (Door/Air Leakage):</div>
                         <div class="text-sm font-bold text-right text-gray-800" id="qInfiltration">0 BTU/hr</div>
 
-                        <div class="text-sm font-medium text-gray-600">Internal Load (Lights, Motors, People):</div>
+                        <div class="text-sm font-medium text-gray-600">3. Internal Load (Lights, Motors, People):</div>
                         <div class="text-sm font-bold text-right text-gray-800" id="qInternal">0 BTU/hr</div>
 
-                        <div class="text-sm font-medium text-gray-600">Product Load (Chilling/Freezing):</div>
-                        <div class="text-sm font-bold text-right text-gray-800" id="qProduct">0 BTU/hr</div>
+                        <div class="text-sm font-medium text-gray-600 pl-4">3a. Product Chilling/Freezing Load:</div>
+                        <div class="text-sm font-bold text-right text-gray-800" id="qChilling">0 BTU/hr</div>
+                        
+                        <div class="text-sm font-medium text-gray-600 pl-4">3b. Product Respiration Load:</div>
+                        <div class="text-sm font-bold text-right text-gray-800" id="qRespiration">0 BTU/hr</div>
 
                         <div class="col-span-2 h-px bg-gray-200 my-2"></div>
                         
