@@ -17,7 +17,7 @@
         @media print {
             body { background-color: white; }
             .print-hidden { display: none !important; }
-            .page-break { page-break-before: always; }
+            .page-break { page-page-break-before: always; }
             .print-section {
                 border-top: 2px solid #3b82f6;
                 padding-top: 1rem;
@@ -43,7 +43,7 @@
             overflow: hidden;
         }
         .collapse-content.open {
-            max-height: 2000px; /* Large value to accommodate content */
+            max-height: 3000px; /* Increased max-height for new section */
         }
         .collapse-header {
             cursor: pointer;
@@ -65,6 +65,20 @@
             <!-- Helper Functions -->
             <!-- ------------------------------------------------------------------- -->
             <script>
+                // --- Utility Functions ---
+
+                function getInputValue(id, type = 'float') {
+                    const el = document.getElementById(id);
+                    if (!el) return 0;
+                    const value = el.value.trim() === '' ? 0 : el.value;
+                    return type === 'int' ? parseInt(value) : parseFloat(value);
+                }
+
+                function getRadioValue(name) {
+                    const radio = document.querySelector(`input[name="${name}"]:checked`);
+                    return radio ? radio.value : '';
+                }
+
                 // Function to toggle collapse state
                 function toggleCollapse(id) {
                     const content = document.getElementById(id);
@@ -82,11 +96,14 @@
                         radio.addEventListener('change', () => {
                             if (radio.checked && radio.value === requiredValue) {
                                 target.classList.remove('hidden');
-                                target.querySelector('input, textarea, select').required = true;
+                                // Make inputs inside the conditional div required
+                                target.querySelectorAll('input, textarea, select').forEach(el => el.required = true);
                             } else if (radio.checked && radio.value !== requiredValue) {
                                 target.classList.add('hidden');
-                                target.querySelector('input, textarea, select').required = false;
-                                target.querySelector('input, textarea, select').value = ''; // Clear value when hidden
+                                target.querySelectorAll('input, textarea, select').forEach(el => {
+                                    el.required = false;
+                                    el.value = ''; // Clear value when hidden
+                                });
                             }
                         });
                     });
@@ -95,7 +112,7 @@
                     const initialCheck = Array.from(radios).find(radio => radio.checked && radio.value === requiredValue);
                     if (!initialCheck) {
                         target.classList.add('hidden');
-                        target.querySelector('input, textarea, select').required = false;
+                        target.querySelectorAll('input, textarea, select').forEach(el => el.required = false);
                     }
                 }
 
@@ -104,7 +121,7 @@
                     // Force open all sections before printing
                     document.querySelectorAll('.collapse-content').forEach(el => el.classList.add('open'));
                     window.print();
-                    // Optionally close them again after print dialog is dismissed (but browser handles this mostly)
+                    // Optionally close them again after print dialog is dismissed
                     setTimeout(() => {
                         document.querySelectorAll('.collapse-content').forEach(el => el.classList.remove('open'));
                     }, 500);
@@ -115,7 +132,7 @@
                     const container = document.getElementById('messageContainer');
                     const color = type === 'error' ? 'bg-red-100 border-red-400 text-red-700' : 'bg-green-100 border-green-400 text-green-700';
                     container.innerHTML = `
-                        <div class="fixed top-4 right-4 p-4 rounded-lg border-l-4 ${color} shadow-lg" role="alert">
+                        <div class="fixed top-4 right-4 p-4 rounded-lg border-l-4 ${color} shadow-lg z-50" role="alert">
                             <p class="font-bold">${type.toUpperCase()}</p>
                             <p>${message}</p>
                         </div>
@@ -126,19 +143,148 @@
                         container.innerHTML = '';
                     }, 3000);
                 }
+                
+                // --- Core Calculation Logic (Simplified) ---
+                function calculateLoad() {
+                    // 1. Get Core Inputs
+                    const boxLong = getInputValue('boxLong');
+                    const boxWide = getInputValue('boxWide');
+                    const boxHigh = getInputValue('boxHigh');
+                    const desiredTemp = getInputValue('desiredTemp');
+                    const ambientTemp = getInputValue('ambientTemp');
+                    const maxLoadLbs = getInputValue('maxLoadLbs');
+                    const enteringTemp = getInputValue('enteringTemp');
+                    const finalTemp = getInputValue('finalTemp');
+                    const pullDownHours = getInputValue('pulldownHours');
+                    const personnelQty = getInputValue('personnelQty', 'int');
+                    const personnelHours = getInputValue('personnelHours');
+                    const lightingWPerSqFt = getInputValue('lightingWPerSqFt');
+                    const motorsHP = getInputValue('motorsHP');
+                    
+                    const floorArea = boxLong * boxWide;
+                    const wallArea = 2 * (boxLong * boxHigh) + 2 * (boxWide * boxHigh);
+                    const ceilingArea = floorArea;
+                    const totalSurfaceArea = floorArea + wallArea + ceilingArea;
+                    const boxVolume = boxLong * boxWide * boxHigh;
+                    const tempDifference = ambientTemp - desiredTemp;
 
-                // Form Submission Handler
+                    // Guard clause for invalid dimensions or calculation parameters
+                    if (boxLong <= 0 || boxWide <= 0 || boxHigh <= 0 || tempDifference <= 0) {
+                        document.getElementById('totalLoadBTU').innerText = '0';
+                        document.getElementById('equipmentRecommendation').innerText = 'Please enter valid Box Dimensions and Temperatures (Ambient > Desired)';
+                        return;
+                    }
+
+                    // --- CALCULATION CONSTANTS (Simplified) ---
+                    // U-Value (Assumed 4" Polyurethane, ~R-28 -> U=0.035)
+                    const U_VALUE = 0.04; 
+                    // Personnel Load (BTU/hr per person for moderate work)
+                    const PERSONNEL_LOAD_BTU_HR = 1000;
+                    // Heat Conversion (Watts to BTU/hr)
+                    const WATTS_TO_BTU = 3.41;
+                    // Heat Conversion (HP to BTU/hr)
+                    const HP_TO_BTU = 2545;
+                    // Generic Product Specific Heat (Btu/lb/°F for chilling)
+                    const SPECIFIC_HEAT = 0.8;
+                    // Infiltration Factor (Simplified Air Changes per Hour equivalent)
+                    const INFILTRATION_FACTOR = (desiredTemp <= 35) ? 1.2 : 0.8; // Higher for Freezers/Low Temp
+                    const SAFETY_FACTOR = 1.15; // 15% safety margin
+
+                    // --- 1. Transmission Load (Heat Leak) ---
+                    // Simplified: Uses a single U-value and the main ambient temperature difference.
+                    const qTransmission = U_VALUE * totalSurfaceArea * tempDifference;
+
+                    // --- 2. Infiltration Load (Air Changes) ---
+                    // Simplified: Uses box volume, ambient/box temp, and an experience factor.
+                    const qInfiltration = boxVolume * tempDifference * INFILTRATION_FACTOR;
+
+                    // --- 3. Internal Load (Lights, Motors, People) ---
+                    const qLights = lightingWPerSqFt * floorArea * WATTS_TO_BTU;
+                    const qMotors = motorsHP * HP_TO_BTU;
+                    const qPersonnel = personnelQty * PERSONNEL_LOAD_BTU_HR * (personnelHours / 24); // Averaged over 24 hrs
+                    
+                    const qInternal = qLights + qMotors + qPersonnel;
+
+                    // --- 4. Product Load (Sensible Chilling Only) ---
+                    let qProduct = 0;
+                    if (pullDownHours > 0 && maxLoadLbs > 0 && (enteringTemp > finalTemp)) {
+                        // Q_product = Mass * C * DeltaT / PullDownHours * 24hrs/day
+                        qProduct = (maxLoadLbs * SPECIFIC_HEAT * (enteringTemp - finalTemp)) / pullDownHours;
+                    }
+
+                    // --- 5. Total Design Load ---
+                    const totalDesignLoad = qTransmission + qInfiltration + qInternal + qProduct;
+                    const totalRequiredCapacity = totalDesignLoad * SAFETY_FACTOR;
+                    
+                    // Round the final result
+                    const finalBTU = Math.round(totalRequiredCapacity);
+
+                    // --- Display Results ---
+                    document.getElementById('qTransmission').innerText = Math.round(qTransmission).toLocaleString() + ' BTU/hr';
+                    document.getElementById('qInfiltration').innerText = Math.round(qInfiltration).toLocaleString() + ' BTU/hr';
+                    document.getElementById('qInternal').innerText = Math.round(qInternal).toLocaleString() + ' BTU/hr';
+                    document.getElementById('qProduct').innerText = Math.round(qProduct).toLocaleString() + ' BTU/hr';
+                    document.getElementById('totalLoadBTU').innerText = finalBTU.toLocaleString() + ' BTU/hr';
+                    
+                    // --- Equipment Recommendation ---
+                    let recommendation = '';
+                    let tempRange = '';
+                    let tdSuggestion = '';
+
+                    if (desiredTemp < 32) {
+                        tempRange = 'Low Temperature (Freezer)';
+                        tdSuggestion = 'Low TD Coil (6°F-8°F) for reduced dehydration/frosting.';
+                    } else if (desiredTemp >= 32 && desiredTemp <= 45) {
+                        tempRange = 'Medium Temperature (Cooler)';
+                        tdSuggestion = 'Medium TD Coil (10°F-12°F) for general storage.';
+                    } else {
+                        tempRange = 'High Temperature (Process Cooling)';
+                        tdSuggestion = 'High TD Coil (15°F+) may be suitable if humidity control is not critical.';
+                    }
+
+                    recommendation = `
+                        <p class="mt-2 text-sm text-gray-800">
+                            <strong>Box Type:</strong> ${tempRange}<br>
+                            <strong>Capacity Class:</strong> The calculated required capacity is approximately ${finalBTU.toLocaleString()} BTU/hr.<br>
+                            <strong>Evaporator Suggestion:</strong> ${tdSuggestion}
+                        </p>
+                        <p class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                            Based on this load and the refrigerant specified in Section 5, look for a condensing unit and evaporator with a matched net cooling capacity of at least **${finalBTU.toLocaleString()} BTU/hr** at the design temperature.
+                        </p>
+                    `;
+                    document.getElementById('equipmentRecommendation').innerHTML = recommendation;
+                }
+
+                // Form Submission Handler and Initialization
                 document.addEventListener('DOMContentLoaded', () => {
                     const form = document.getElementById('sizerForm');
+                    
+                    // Event listener for calculation button
+                    document.getElementById('calculateButton').addEventListener('click', (e) => {
+                        e.preventDefault();
+                        calculateLoad();
+                        toggleCollapse('calculationSection'); // Open the results section
+                    });
+
+                    // Form submit handler (original)
                     form.addEventListener('submit', (e) => {
                         e.preventDefault();
-                        showMessage("Form data simulated for submission. You can now use the 'Print Form' button to save or share a copy.", 'info');
+                        showMessage("Form data simulated for submission. Use the 'Print Form' button to save or share a copy.", 'info');
                     });
 
                     // Initialize conditional fields
                     toggleConditionalInput('isHotColdArea', 'hotColdDescriptionField', 'Yes');
                     toggleConditionalInput('hasStripCurtains', 'stripCurtainsListField', 'Yes');
                     toggleConditionalInput('hasAirCurtains', 'airCurtainsListField', 'Yes');
+
+                    // Add change listeners to trigger auto-calculation on input (optional, but nice UX)
+                    const inputsToWatch = ['boxLong', 'boxWide', 'boxHigh', 'desiredTemp', 'ambientTemp', 'maxLoadLbs', 'enteringTemp', 'finalTemp', 'pulldownHours', 'personnelQty', 'personnelHours', 'lightingWPerSqFt', 'motorsHP'];
+                    inputsToWatch.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            el.addEventListener('change', calculateLoad);
+                        }
+                    });
                 });
             </script>
 
@@ -205,11 +351,11 @@
                         <!-- Temp & Humidity -->
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-500">Desired Box Temperature (°F)</label>
-                            <input type="number" step="0.1" placeholder="Temp" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Temp" id="desiredTemp" class="p-3 border border-gray-300 rounded-lg w-full" required value="40">
                         </div>
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-500">Humidity (% RH)</label>
-                            <input type="number" min="0" max="100" placeholder="Humidity" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" min="0" max="100" placeholder="Humidity" class="p-3 border border-gray-300 rounded-lg w-full" required value="80">
                         </div>
 
                         <!-- Location -->
@@ -231,7 +377,7 @@
                         <!-- Ambient Temp & Hot/Cold Area -->
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-500">Ambient Temperature (°F)</label>
-                            <input type="number" step="0.1" placeholder="Ambient Temp" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Ambient Temp" id="ambientTemp" class="p-3 border border-gray-300 rounded-lg w-full" required value="85">
                         </div>
                         <div class="col-span-2">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Near Hot/Cold Areas?</label>
@@ -246,19 +392,19 @@
                         </div>
                     </div>
 
-                    <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Box Dimensions</h3>
+                    <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Box Dimensions (ft)</h3>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Long (ft)</label>
-                            <input type="number" step="0.01" placeholder="Length" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.01" placeholder="Length" id="boxLong" class="p-3 border border-gray-300 rounded-lg w-full" required value="10">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Wide (ft)</label>
-                            <input type="number" step="0.01" placeholder="Width" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.01" placeholder="Width" id="boxWide" class="p-3 border border-gray-300 rounded-lg w-full" required value="10">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-500">High (ft)</label>
-                            <input type="number" step="0.01" placeholder="Height" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.01" placeholder="Height" id="boxHigh" class="p-3 border border-gray-300 rounded-lg w-full" required value="8">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Elevation (ft)</label>
@@ -279,7 +425,7 @@
 
                 <div id="insulationSection" class="collapse-content">
                     <div class="mt-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Insulation Type</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Insulation Type (Used only for documentation - calculation uses generic U-value)</label>
                         <select class="p-3 border border-gray-300 rounded-lg w-full mb-4">
                             <option>Select Insulation Type</option>
                             <option>Fiberglass</option>
@@ -335,7 +481,7 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Total Doors (Quantity)</label>
-                            <input type="number" min="0" placeholder="Quantity" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" min="0" placeholder="Quantity" class="p-3 border border-gray-300 rounded-lg w-full" required value="1">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Door Operation</label>
@@ -347,7 +493,7 @@
                         <div class="col-span-full">
                              <label class="block text-sm font-medium text-gray-700 mb-1">Door Types (Check all that apply)</label>
                              <div class="flex flex-wrap gap-4">
-                                <label class="inline-flex items-center"><input type="checkbox" name="doorTypes" value="Standard" class="form-checkbox text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Standard</span></label>
+                                <label class="inline-flex items-center"><input type="checkbox" name="doorTypes" value="Standard" class="form-checkbox text-blue-600 h-4 w-4" checked><span class="ml-2 text-gray-700">Standard</span></label>
                                 <label class="inline-flex items-center"><input type="checkbox" name="doorTypes" value="Sliding" class="form-checkbox text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Sliding</span></label>
                                 <label class="inline-flex items-center"><input type="checkbox" name="doorTypes" value="Glass" class="form-checkbox text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Glass</span></label>
                                 <label class="inline-flex items-center"><input type="checkbox" name="doorTypes" value="Dock" class="form-checkbox text-blue-600 h-4 w-4"><span class="ml-2 text-gray-700">Dock</span></label>
@@ -358,11 +504,11 @@
                     <div class="grid grid-cols-2 gap-4 mt-4">
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Area Door Opens Into: Temp (°F)</label>
-                            <input type="number" step="0.1" placeholder="Temp" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Temp" class="p-3 border border-gray-300 rounded-lg w-full" required value="75">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Area Door Opens Into: RH (%)</label>
-                            <input type="number" min="0" max="100" step="1" placeholder="RH" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" min="0" max="100" step="1" placeholder="RH" class="p-3 border border-gray-300 rounded-lg w-full" required value="50">
                         </div>
                     </div>
 
@@ -405,23 +551,23 @@
                 <div id="loadSection" class="collapse-content">
                     <h3 class="text-lg font-medium text-gray-800 mt-3 mb-2">Product Details</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" placeholder="Product (e.g., Beef, Produce, Frozen Poultry)" class="p-3 border border-gray-300 rounded-lg" required>
-                        <input type="text" placeholder="Packaging (e.g., Cardboard, Plastic Wrap, None)" class="p-3 border border-gray-300 rounded-lg" required>
+                        <input type="text" placeholder="Product (e.g., Beef, Produce, Frozen Poultry)" class="p-3 border border-gray-300 rounded-lg" required value="Fresh Produce">
+                        <input type="text" placeholder="Packaging (e.g., Cardboard, Plastic Wrap, None)" class="p-3 border border-gray-300 rounded-lg" required value="Cardboard Boxes">
                         <div class="col-span-full">
                             <label class="block text-xs font-medium text-gray-500">Maximum Load (lbs. per day)</label>
-                            <input type="number" step="0.1" placeholder="Max Load (lbs/day)" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Max Load (lbs/day)" id="maxLoadLbs" class="p-3 border border-gray-300 rounded-lg w-full" required value="1000">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Entering Temperature (°F)</label>
-                            <input type="number" step="0.1" placeholder="Entering Temp" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Entering Temp" id="enteringTemp" class="p-3 border border-gray-300 rounded-lg w-full" required value="70">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Final Temperature (°F)</label>
-                            <input type="number" step="0.1" placeholder="Final Temp" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Final Temp" id="finalTemp" class="p-3 border border-gray-300 rounded-lg w-full" required value="40">
                         </div>
                         <div class="col-span-full">
                             <label class="block text-xs font-medium text-gray-500">Pull Down In (Hours)</label>
-                            <input type="number" step="0.1" placeholder="Hours" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="Hours" id="pulldownHours" class="p-3 border border-gray-300 rounded-lg w-full" required value="12">
                         </div>
                     </div>
 
@@ -430,20 +576,20 @@
                         <!-- Lighting -->
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-500">Lighting (Watts per sq. foot)</label>
-                            <input type="number" step="0.01" placeholder="W/sq ft" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.01" placeholder="W/sq ft" id="lightingWPerSqFt" class="p-3 border border-gray-300 rounded-lg w-full" required value="1.5">
                         </div>
                         <!-- Motors -->
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-500">Motors (HP)</label>
-                            <input type="number" step="0.01" placeholder="HP" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.01" placeholder="HP" id="motorsHP" class="p-3 border border-gray-300 rounded-lg w-full" required value="0.5">
                         </div>
 
                         <!-- Personnel -->
                         <div class="col-span-2">
                             <label class="block text-sm font-medium text-gray-700">Personnel</label>
                             <div class="flex gap-2">
-                                <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required>
-                                <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required>
+                                <input type="number" min="0" placeholder="Qty" id="personnelQty" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="1">
+                                <input type="number" min="0" step="0.1" placeholder="Hours/day" id="personnelHours" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="4">
                             </div>
                         </div>
 
@@ -451,8 +597,8 @@
                         <div class="col-span-2">
                             <label class="block text-sm font-medium text-gray-700">Forklifts</label>
                             <div class="flex gap-2">
-                                <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required>
-                                <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required>
+                                <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
+                                <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
                             </div>
                         </div>
 
@@ -460,8 +606,8 @@
                         <div class="col-span-2">
                             <label class="block text-sm font-medium text-gray-700">Pallet Jacks</label>
                             <div class="flex gap-2">
-                                <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required>
-                                <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required>
+                                <input type="number" min="0" placeholder="Qty" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
+                                <input type="number" min="0" step="0.1" placeholder="Hours/day" class="p-3 border border-gray-300 rounded-lg w-1/2" required value="0">
                             </div>
                         </div>
                     </div>
@@ -479,17 +625,17 @@
 
                 <div id="systemSection" class="collapse-content">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                        <input type="text" placeholder="Refrigerant (e.g., R-404A, R-448A)" class="p-3 border border-gray-300 rounded-lg" required>
+                        <input type="text" placeholder="Refrigerant (e.g., R-404A, R-448A)" class="p-3 border border-gray-300 rounded-lg" required value="R-448A">
                         <select class="p-3 border border-gray-300 rounded-lg">
                             <option>Select Compressor Type</option>
                             <option>Semi-Hermetic</option>
                             <option>Hermetic</option>
                             <option>Scroll</option>
                         </select>
-                        <input type="text" placeholder="Brand Preferred (e.g., Copeland, Danfoss)" class="p-3 border border-gray-300 rounded-lg" required>
+                        <input type="text" placeholder="Brand Preferred (e.g., Copeland, Danfoss)" class="p-3 border border-gray-300 rounded-lg" required value="Danfoss">
                         <div>
                             <label class="block text-xs font-medium text-gray-500">Desired Evaporator TD (°F)</label>
-                            <input type="number" step="0.1" placeholder="TD (°F)" class="p-3 border border-gray-300 rounded-lg w-full" required>
+                            <input type="number" step="0.1" placeholder="TD (°F)" class="p-3 border border-gray-300 rounded-lg w-full" required value="10">
                         </div>
                     </div>
 
@@ -518,13 +664,13 @@
 
                         <!-- Condensing Units -->
                         <div class="text-sm font-medium pt-2">Condensing Units:</div>
-                        <input type="number" placeholder="V" class="p-2 border border-gray-300 rounded-lg" required>
-                        <input type="text" placeholder="PH / Hz" class="p-2 border border-gray-300 rounded-lg" required>
+                        <input type="number" placeholder="V" class="p-2 border border-gray-300 rounded-lg" required value="208">
+                        <input type="text" placeholder="PH / Hz" class="p-2 border border-gray-300 rounded-lg" required value="3PH/60Hz">
 
                         <!-- Evaporator Coils -->
                         <div class="text-sm font-medium pt-2">Evaporator Coils:</div>
-                        <input type="number" placeholder="V" class="p-2 border border-gray-300 rounded-lg" required>
-                        <input type="text" placeholder="PH / Hz" class="p-2 border border-gray-300 rounded-lg" required>
+                        <input type="number" placeholder="V" class="p-2 border border-gray-300 rounded-lg" required value="120">
+                        <input type="text" placeholder="PH / Hz" class="p-2 border border-gray-300 rounded-lg" required value="1PH/60Hz">
                     </div>
                 </div>
             </div>
@@ -549,18 +695,58 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- ------------------------------------------------------------------- -->
+            <!-- NEW SECTION 7: Load Calculation & Equipment Selection -->
+            <!-- ------------------------------------------------------------------- -->
+            <div class="print-section mb-6">
+                <div class="collapse-header flex justify-between items-center py-2 bg-blue-50 border-y border-blue-200" onclick="toggleCollapse('calculationSection')">
+                    <h2 class="text-xl font-extrabold text-blue-700">7. Load Calculation & Equipment Selection</h2>
+                    <svg id="arrow-calculationSection" class="w-5 h-5 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </div>
+
+                <div id="calculationSection" class="collapse-content">
+                    <h3 class="text-lg font-medium text-gray-800 mt-3 mb-2">Calculated Heat Loads (BTU/hr)</h3>
+                    <div class="grid grid-cols-2 gap-4 p-4 rounded-lg bg-gray-50 border">
+                        <div class="text-sm font-medium text-gray-600">Transmission Load (Walls, Floor, Ceiling):</div>
+                        <div class="text-sm font-bold text-right text-gray-800" id="qTransmission">0 BTU/hr</div>
+                        
+                        <div class="text-sm font-medium text-gray-600">Infiltration Load (Door/Air Leakage):</div>
+                        <div class="text-sm font-bold text-right text-gray-800" id="qInfiltration">0 BTU/hr</div>
+
+                        <div class="text-sm font-medium text-gray-600">Internal Load (Lights, Motors, People):</div>
+                        <div class="text-sm font-bold text-right text-gray-800" id="qInternal">0 BTU/hr</div>
+
+                        <div class="text-sm font-medium text-gray-600">Product Load (Chilling/Freezing):</div>
+                        <div class="text-sm font-bold text-right text-gray-800" id="qProduct">0 BTU/hr</div>
+
+                        <div class="col-span-2 h-px bg-gray-200 my-2"></div>
+                        
+                        <div class="text-lg font-bold text-blue-700">TOTAL REQUIRED CAPACITY (with 15% Safety):</div>
+                        <div class="text-lg font-extrabold text-right text-blue-700" id="totalLoadBTU">0 BTU/hr</div>
+                    </div>
+
+                    <h3 class="text-lg font-medium text-gray-800 mt-6 mb-2 border-t pt-4">Equipment Recommendation</h3>
+                    <div id="equipmentRecommendation" class="p-3 bg-white rounded-lg border border-gray-200">
+                        <p class="text-gray-500">Click the "Calculate Load" button below to generate a recommendation.</p>
+                    </div>
+                </div>
+            </div>
 
             <!-- ------------------------------------------------------------------- -->
             <!-- Form Actions -->
             <!-- ------------------------------------------------------------------- -->
             <div class="print-hidden flex flex-col sm:flex-row gap-4 justify-end mt-8 border-t pt-6">
-                <button type="button" onclick="document.getElementById('sizerForm').reset()" class="bg-gray-200 text-gray-700 hover:bg-gray-300 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md">
+                <button type="button" id="calculateButton" class="bg-yellow-600 text-white hover:bg-yellow-700 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md order-1 sm:order-0">
+                    Calculate Load
+                </button>
+                <button type="button" onclick="document.getElementById('sizerForm').reset()" class="bg-gray-200 text-gray-700 hover:bg-gray-300 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md order-2 sm:order-1">
                     Reset Form
                 </button>
-                <button type="button" onclick="printForm()" class="bg-blue-600 text-white hover:bg-blue-700 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md">
+                <button type="button" onclick="printForm()" class="bg-blue-600 text-white hover:bg-blue-700 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md order-3 sm:order-2">
                     Print Form / Save as PDF
                 </button>
-                <button type="submit" class="bg-green-600 text-white hover:bg-green-700 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md">
+                <button type="submit" class="bg-green-600 text-white hover:bg-green-700 font-semibold py-3 px-6 rounded-lg transition-colors shadow-md order-4 sm:order-3">
                     Submit Analysis
                 </button>
             </div>
