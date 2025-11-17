@@ -13,8 +13,7 @@ Commercial Cooler & Freezer Load Calculator — ASHRAE-Aligned
 
 🛠️ Overview
 
-The Walk-In Refrigerated Room Analysis Tool is a branded, guided, and highly accurate sizing calculator for commercial walk-in coolers and freezers.
-It uses ASHRAE-aligned engineering principles to calculate required BTU/hr based on:
+The Walk-In Refrigerated Room Analysis Tool is a branded, guided, and highly accurate cooling load calculator for commercial walk-in coolers and freezers. It uses ASHRAE-aligned engineering principles to calculate required BTU/hr based on:
 
 Ambient conditions
 
@@ -28,14 +27,26 @@ Usage patterns
 
 Evaporator TD and system type
 
-This tool reduces guesswork for estimators and delivers clear, contractor-ready equipment recommendations.
+This tool reduces estimator guesswork and outputs clear, contractor-ready equipment recommendations.
 
 🚀 Key Features
-✔ ASHRAE-Aligned Heat Load Calculation
+ASHRAE-Aligned Heat Load Calculation
 
-Dynamic and accurate: insulation U-values, infiltration factors, personnel heat, product enthalpy, and more.
+Dynamic and accurate, including:
 
-✔ Guided Autofill System
+Insulation U-values
+
+Infiltration factors
+
+Personnel heat
+
+Product enthalpy
+
+Lighting load
+
+Safety factor
+
+Guided Autofill System
 
 Choosing a Primary Application auto-populates:
 
@@ -47,13 +58,13 @@ Internal load baselines
 
 Typical usage levels
 
-✔ Mechanical Temp Branding
+Mechanical Temp Branding
 
-Clean, streamlined, customer-ready form flow.
+Clean, streamlined workflow designed for field estimators.
 
-✔ Full Load Breakdown
+Full Load Breakdown
 
-Outputs each category individually:
+The tool displays component loads:
 
 Transmission Load
 
@@ -63,53 +74,53 @@ Internal Load
 
 Product Load
 
-✔ Built-In Cheatsheet
+Built-In Cheatsheet
 
-Section 8 includes quick reference values:
+Quick-reference values for:
 
 Evaporator TD
 
-R-Values
+R-values
 
 Typical walk-in temperatures
 
-Panel thickness guides
+Panel thickness guidelines
 
 📝 How to Use the Tool
 
-The tool is divided into eight collapsible sections.
-Go through them in order, as early inputs affect the final calculation.
+The form is divided into eight collapsible sections.
+Complete them in order, as early inputs affect the final calculation.
 
-Sections Overview
+Section Overview
 Section	Purpose	Key Inputs
-1. Contact & Submission	Customer info & operating mode.	Primary Application, Box Usage.
-2. Box Specs & Environment	Physical size & ambient conditions.	L/W/H, Ambient Temp.
-3. Insulation & Door Details	Heat resistance & leakage points.	Insulation Type, Number of Doors.
-4. Internal Loads & Product	Product chilling & human/lighting loads.	Product Type, lbs/day, Pulldown Hours.
-5. Refrigeration System	System type & available power.	Refrigerant, TD, Voltage/Phase.
-6. Comments	Special site notes.	Irregular shapes, access issues.
-7. Load Calculation	Final BTU/hr & equipment recommendation.	Click Calculate Load.
-8. Cheatsheet	Quick lookup of common data.	TD ranges, R-values, temps.
+1. Contact & Submission	Customer info & base settings	Primary Application, Usage Pattern
+2. Box Specs & Environment	Physical space & ambient	Dimensions, Ambient Temp
+3. Insulation & Door Details	Heat transfer inputs	Insulation Type, Doors
+4. Internal Loads & Product	Daily product load & internal heat	Product Type, lbs/day, Pulldown Hours
+5. Refrigeration System	Refrigeration mode & power	Refrigerant, TD, Voltage/Phase
+6. Comments	Site-specific notes	Access, irregular shapes
+7. Load Calculation	Final BTU/hr results	Click Calculate Load
+8. Cheatsheet	Reference values	TD, R-values, Temps
 💡 Quick Sizing Pointers
 Concept	Why It Matters	Best Practice
-Box Usage	Door openings drive infiltration load.	“Long Storage” for low traffic, “Heavy” for frequent access.
-Evaporator TD	Controls humidity & coil size.	6–8°F = freezers/high humidity, 10–12°F = general coolers.
-Product Load	Can dominate total load if pulldown is short.	Confirm lbs/day + pulldown hours.
-Insulation Type	Defines U-value and energy loss.	Polyurethane recommended.
-Safety Factor	Ensures real-world buffer.	15% automatically added.
+Box Usage	Door openings drive infiltration	Choose accurately (Long Storage vs Heavy Use)
+Evaporator TD	Controls humidity & coil size	6–8°F for freezers; 10–12°F for coolers
+Product Load	Can dominate load for short pulldown	Confirm lbs/day + hours
+Insulation Type	Sets U-value	Polyurethane is preferred
+Safety Factor	Provides real-world buffer	Tool automatically adds 15%
 💾 Printing & Sharing
 
-Click Print Form / Save as PDF to:
+Click Print Form / Save as PDF to prepare the layout for printing:
 
-Expand all collapsible sections
+Opens all sections
 
-Hide interactive UI elements
+Hides buttons & form controls
 
-Produce a clean report for customers or archives
+Produces a clean report
 
-Works with your browser’s Print → Save as PDF option.
+Then print or Save as PDF in your browser.
 
-📂 Project Structure (example)
+📂 Project Structure (Example)
 /
 ├── index.html
 ├── scripts/
@@ -122,9 +133,9 @@ Works with your browser’s Print → Save as PDF option.
 
 🤝 Contributing
 
-Pull requests are welcome!
-If you have suggestions (additional load types, more applications, improved infiltration formulas), feel free to open an issue.
+Pull requests are welcome.
+Have ideas (more product types, more use cases, improved TD logic)? Open an issue.
 
 📜 License
 
-This project is licensed under the MIT License.
+Licensed under the MIT License.
